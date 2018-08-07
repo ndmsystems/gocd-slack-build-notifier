@@ -6,7 +6,7 @@
 
     <groupId>in.ashwanthkumar</groupId>
     <artifactId>gocd-slack-notifier</artifactId>
-    <version>1.4.0-RC11</version>
+    <version>1.4.0-RC12</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -39,6 +39,12 @@
             <artifactId>gson</artifactId>
             <version>2.3.1</version>
         </dependency>
+<!-- https://mvnrepository.com/artifact/org.json/json -->
+<dependency>
+    <groupId>org.json</groupId>
+    <artifactId>json</artifactId>
+    <version>20160810</version>
+</dependency>
 
         <dependency>
             <groupId>com.typesafe</groupId>

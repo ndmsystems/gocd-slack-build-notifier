@@ -17,17 +17,28 @@ import java.util.List;
 
 import com.thoughtworks.go.plugin.api.logging.Logger;
 import in.ashwanthkumar.utils.collections.Lists;
-import in.ashwanthkumar.utils.func.Function;
 import in.ashwanthkumar.utils.lang.StringUtils;
 
 import static in.ashwanthkumar.utils.lang.StringUtils.startsWith;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Random;
+import org.json.JSONObject;
 
 public class SlackPipelineListener extends PipelineListener {
     public static final int DEFAULT_MAX_CHANGES_PER_MATERIAL_IN_SLACK = 5;
-    private Logger LOG = Logger.getLoggerFor(SlackPipelineListener.class);
+    private final Logger LOG = Logger.getLoggerFor(SlackPipelineListener.class);
 
     private final Slack slack;
-
+	
+	
+	private final List<String> passedList = Arrays.asList("Деплой отгремел.", "Деплой окончен. Всем спасибо.");
+	private final List<String> failedList = Arrays.asList("Деплой провален.", "Чуда не произошло.", "Всё пропало.");
+	private final List<String> buildingList = Arrays.asList("Деплой начался");
+	private final List<String> brokenList = Arrays.asList("Всё сломалось.");
+	private final List<String> fixedList = Arrays.asList("Отбой деплойной тревоги.");
+	private final List<String> cancelledList = Arrays.asList("Деплой отменён.");
+	
     public SlackPipelineListener(Rules rules) {
         super(rules);
         slack = new Slack(rules.getWebHookUrl(), rules.getProxy());
@@ -79,66 +90,79 @@ public class SlackPipelineListener extends PipelineListener {
         slack.push(slackAttachment(rule, message, PipelineStatus.CANCELLED).color("warning"));
     }
 
-    private SlackAttachment slackAttachment(PipelineRule rule, GoNotificationMessage message, PipelineStatus pipelineStatus) throws URISyntaxException {
-        String title = String.format("Stage [%s] %s %s", message.fullyQualifiedJobName(), verbFor(pipelineStatus), pipelineStatus).replaceAll("\\s+", " ");
-        SlackAttachment buildAttachment = new SlackAttachment("")
-                .fallback(title)
-                .title(title, message.goServerUrl(rules.getGoServerHost()));
-
-        List<String> consoleLogLinks = new ArrayList<String>();
-        // Describe the build.
-        try {
-            Pipeline details = message.fetchDetails(rules);
-            Stage stage = pickCurrentStage(details.stages, message);
-            buildAttachment.addField(new SlackAttachment.Field("Triggered by", stage.approvedBy, true));
-            if (details.buildCause.triggerForced) {
-                buildAttachment.addField(new SlackAttachment.Field("Reason", "Manual Trigger", true));
-            } else {
-                buildAttachment.addField(new SlackAttachment.Field("Reason", details.buildCause.triggerMessage, true));
+	private SlackAttachment slackAttachment(PipelineRule rule, GoNotificationMessage message, PipelineStatus pipelineStatus) throws URISyntaxException {
+		String title = String.format(verbFor(pipelineStatus));
+		SlackAttachment buildAttachment = new SlackAttachment("")
+			.fallback(title)
+			.title(title);
+		
+		List<String> consoleLogLinks = new ArrayList<>();
+		// Describe the build.
+		try {
+			Pipeline details = message.fetchDetails(rules);
+			Stage stage = pickCurrentStage(details.stages, message);
+			
+			buildAttachment.addField(new SlackAttachment.Field("Pipeline", details.name, true));
+			
+			buildAttachment.addField(new SlackAttachment.Field("Triggered by", stage.approvedBy, true));
+			
+			if (rules.getDisplayConsoleLogLinks() && pipelineStatus != PipelineStatus.PASSED && pipelineStatus != PipelineStatus.BUILDING) {
+				consoleLogLinks = createConsoleLogLinks(rules.getGoServerHost(), details, stage, pipelineStatus);
             }
-            buildAttachment.addField(new SlackAttachment.Field("Label", details.label, true));
-            if (rules.getDisplayConsoleLogLinks()) {
-                consoleLogLinks = createConsoleLogLinks(rules.getGoServerHost(), details, stage, pipelineStatus);
-            }
-        } catch (Exception e) {
-            buildAttachment.text("(Couldn't fetch build details; see server log.) ");
+        } catch (GoNotificationMessage.BuildDetailsNotFoundException | IOException | URISyntaxException e) {
+            buildAttachment.text("Couldn't fetch build details.");
             LOG.warn("Couldn't fetch build details", e);
         }
-        buildAttachment.addField(new SlackAttachment.Field("Status", pipelineStatus.name(), true));
 
         // Describe the root changes that made up this build.
         if (rules.getDisplayMaterialChanges()) {
             try {
                 List<MaterialRevision> changes = message.fetchChanges(rules);
-                StringBuilder sb = new StringBuilder();
-                for (MaterialRevision change : changes) {
-                    boolean isTruncated = false;
-                    if (rules.isTruncateChanges() && change.modifications.size() > DEFAULT_MAX_CHANGES_PER_MATERIAL_IN_SLACK) {
-                        change.modifications = Lists.take(change.modifications, DEFAULT_MAX_CHANGES_PER_MATERIAL_IN_SLACK);
-                        isTruncated = true;
-                    }
+				for (MaterialRevision change : changes) {
+					StringBuilder sb = new StringBuilder();
+                    
                     for (Modification mod : change.modifications) {
+						//LOG.info("Mod revision for material " + change.material + " is " + mod.revision);
+						//LOG.info("Material type is " + change.material.type);
+						//LOG.info("Material description " + change.material.description);
+						
                         String url = change.modificationUrl(mod);
                         if (url != null) {
-                            sb.append("<").append(url).append("|").append(mod.revision).append(">");
+							// mod.revision for S3 bucket fetch-recovery-fw contains name of file, so we don't want to cut it
+							if (!"S3".equals(mod.userName)) {
+								sb.append("<").append(url).append("|").append(mod.revision.substring(0, 6)).append(">");
+							} else {
+								sb.append("<").append(url).append("|").append(mod.revision).append(">");
+							}
                             sb.append(": ");
                         } else if (mod.revision != null) {
-                            sb.append(mod.revision);
+                            sb.append(mod.revision.substring(0, 6));
                             sb.append(": ");
-                        }
-                        String comment = mod.summarizeComment();
+						}
+						
+						String comment = null;
+						if (!"S3".equals(mod.userName)) {
+							// For full comment use mod.comment();
+							comment = mod.summarizeComment();
+						} else {
+							JSONObject j = new JSONObject(mod.comment);
+							comment = j.getString("COMMENT");
+						}
                         if (comment != null) {
                             sb.append(comment);
                         }
-                        if (mod.userName != null) {
+						
+                        if (mod.userName != null && !"S3".equals(mod.userName)) {
                             sb.append(" - ");
                             sb.append(mod.userName);
                         }
                         sb.append("\n");
                     }
-                    String fieldNamePrefix = (isTruncated) ? String.format("Latest %d", DEFAULT_MAX_CHANGES_PER_MATERIAL_IN_SLACK) : "All";
-                    String fieldName = String.format("%s changes for %s", fieldNamePrefix, change.material.description);
-                    buildAttachment.addField(new SlackAttachment.Field(fieldName, sb.toString(), false));
+					
+					String materialName = change.material.getName();					
+					
+					String fieldName = "Changes for " + (materialName == null ? change.material.description : materialName);
+					buildAttachment.addField(new SlackAttachment.Field(fieldName, sb.toString(), false));
                 }
             } catch (Exception e) {
                 buildAttachment.addField(new SlackAttachment.Field("Changes", "(Couldn't fetch changes; see server log.)", true));
@@ -151,21 +175,12 @@ public class SlackPipelineListener extends PipelineListener {
             buildAttachment.addField(new SlackAttachment.Field("Console Logs", logLinks, true));
         }
 
-        if (!rule.getOwners().isEmpty()) {
-            List<String> slackOwners = Lists.map(rule.getOwners(), new Function<String, String>() {
-                @Override
-                public String apply(String input) {
-                    return String.format("<@%s>", input);
-                }
-            });
-            buildAttachment.addField(new SlackAttachment.Field("Owners", Lists.mkString(slackOwners, ","), true));
-        }
         LOG.info("Pushing " + title + " notification to Slack");
         return buildAttachment;
     }
 
     private List<String> createConsoleLogLinks(String host, Pipeline pipeline, Stage stage, PipelineStatus pipelineStatus) throws URISyntaxException {
-        List<String> consoleLinks = new ArrayList<String>();
+        List<String> consoleLinks = new ArrayList<>();
         for (String job : stage.jobNames()) {
             URI link;
             // We should be linking to Console Tab when the status is building,
@@ -191,24 +206,27 @@ public class SlackPipelineListener extends PipelineListener {
         throw new IllegalArgumentException("The list of stages from the pipeline (" + message.getPipelineName() + ") doesn't have the active stage (" + message.getStageName() + ") for which we got the notification.");
     }
 
-    private String verbFor(PipelineStatus pipelineStatus) {
-        switch (pipelineStatus) {
-            case BROKEN:
-            case FIXED:
-            case BUILDING:
-                return "is";
-            case FAILED:
-            case PASSED:
-                return "has";
-            case CANCELLED:
-                return "was";
-            default:
-                return "";
-        }
-    }
-
-    private void updateSlackChannel(String slackChannel) {
-        LOG.debug(String.format("Updating target slack channel to %s", slackChannel));
+	private String verbFor(PipelineStatus pipelineStatus) {
+		switch (pipelineStatus) {
+			case BROKEN:
+				return brokenList.get(new Random().nextInt(brokenList.size()));
+			case FIXED:
+				return fixedList.get(new Random().nextInt(fixedList.size()));
+			case BUILDING:
+				return buildingList.get(new Random().nextInt(buildingList.size()));
+			case FAILED:
+				return failedList.get(new Random().nextInt(failedList.size()));
+			case PASSED:
+				return passedList.get(new Random().nextInt(passedList.size()));
+			case CANCELLED:
+				return cancelledList.get(new Random().nextInt(cancelledList.size()));
+			default:
+				return "";
+		}
+	}
+	
+	private void updateSlackChannel(String slackChannel) {
+		LOG.debug(String.format("Updating target slack channel to %s", slackChannel));
         // by default post it to where ever the hook is configured to do so
         if (startsWith(slackChannel, "#")) {
             slack.sendToChannel(slackChannel.substring(1));

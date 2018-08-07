@@ -8,17 +8,19 @@ import java.net.MalformedURLException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.json.JSONObject;
 
 public class MaterialRevision {
-    static private final Pattern PIPELINE_REVISION_PATTERN =
-            Pattern.compile("^([^/]+)/(\\d+)/.*");
-    static private final Pattern GITHUB_MATERIAL_PATTERN =
-            Pattern.compile("^URL: git@github\\.com:(.+)\\.git,.*");
+	static private final Pattern PIPELINE_REVISION_PATTERN = Pattern.compile("^([^/]+)/(\\d+)/.*");
+	static private final Pattern GITHUB_MATERIAL_PATTERN = Pattern.compile("^URL:.*github\\.com(.+)\\.git,.*");
+	static private final Pattern KILNHG_MATERIAL_PATTERN = Pattern.compile("^URL:.*@ndm\\.kilnhg\\.com(.+)\\.git,.*");
+	static private final Pattern S3_MATERIAL_PATTERN = Pattern.compile("^Repository:.*s3_bucket=.*Package.*");
 
-    private Logger LOG = Logger.getLoggerFor(MaterialRevision.class);
-
-    @SerializedName("changed")
-    public boolean changed;
+	
+	private Logger LOG = Logger.getLoggerFor(MaterialRevision.class);
+	
+	@SerializedName("changed")
+	public boolean changed;
 
     @SerializedName("material")
     public Material material;
@@ -43,33 +45,46 @@ public class MaterialRevision {
      * the containing MaterialRevision.)
      */
     public String modificationUrl(Modification modification) {
-        if (!material.type.equals("Git") || material.description == null
-                || modification.revision == null) {
-            LOG.info(String.format("Can't build URL for modification (%s)/(%s)/(%s)",
-                    material.type, material.description,
-                    modification.revision));
+        if (material.description == null || modification.revision == null) {
+            LOG.info(String.format("Can't build URL for modification (%s)/(%s)/(%s)", material.type, material.description, modification.revision));
             return null;
         }
 
-        // Parse descriptions like:
-        // "URL: git@github.com:faradayio/marius.git, Branch: master"
-        Matcher matcher = GITHUB_MATERIAL_PATTERN.matcher(material.description);
-        if (!matcher.matches()) {
-            LOG.info("Can't build URL for non-GitHub repo: " + material.description);
-            return null;
-        }
-        String org_and_repo = matcher.group(1);
-
-        // Shorten our commit ID.
-        String commit = modification.revision;
-        if (commit.length() > 6)
-            commit = commit.substring(0, 6);
-
-        return "https://github.com/" + org_and_repo + "/commit/" + commit;
-    }
-
-
-    /**
+        Matcher matcher1 = GITHUB_MATERIAL_PATTERN.matcher(material.description);
+		Matcher matcher2 = KILNHG_MATERIAL_PATTERN.matcher(material.description);
+		Matcher matcher3 = S3_MATERIAL_PATTERN.matcher(material.description);
+		
+		if (matcher1.matches()) { //This is a GitHub repo
+			String org_and_repo = matcher1.group(1);
+			
+			// Shorten commit ID
+			String commit = modification.revision;
+			if (commit.length() > 6)
+				commit = commit.substring(0, 6);
+			
+			return "https://github.com" + org_and_repo + "/commit/" + commit;
+		} else if (matcher2.matches()) { //This is a kilnhg repo
+			// Shorten our commit ID.
+			String commit = modification.revision;
+			if (commit.length() > 6) {
+				commit = commit.substring(0, 6);
+			}
+			
+			return "https://cgit.ndm9.net/" + material.getName() + "/commit/?id=" + commit;
+		} else if (matcher3.matches()) { // This is a S3 package
+			// Return trackback URL - parse JSON from mod.comment
+			JSONObject j = new JSONObject(modification.comment);
+			String trackbackURL = j.getString("TRACKBACK_URL");
+			
+			return trackbackURL;
+		}
+		
+		LOG.info("Can't build URL for repo: " + material.description);
+		return null;
+	}
+	
+	
+	/**
      * Collect all changed MaterialRevision objects, walking changed
      * "Pipeline" objects recursively instead of including them directly.
      */
