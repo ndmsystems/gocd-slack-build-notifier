@@ -18,11 +18,11 @@ abstract public class PipelineListener {
 
     public void notify(GoNotificationMessage message) throws Exception {
         message.tryToFixStageResult(rules);
-        LOG.debug(String.format("Finding rules with state %s", message.getStageResult()));
+        LOG.info(String.format("-- Finding rules with state %s", message.getStageResult()));
         List<PipelineRule> foundRules = rules.find(message.getPipelineName(), message.getStageName(), message.getPipelineGroup(), message.getStageResult());
         if (foundRules.size() > 0) {
             for (PipelineRule pipelineRule : foundRules) {
-                LOG.debug(String.format("Matching rule is %s", pipelineRule));
+                LOG.info(String.format("-- Matching rule is %s", pipelineRule));
                 handlePipelineStatus(pipelineRule, PipelineStatus.valueOf(message.getStageResult().toUpperCase()), message);
                 if (! rules.getProcessAllRules()) {
                     break;

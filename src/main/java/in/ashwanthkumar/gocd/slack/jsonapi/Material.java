@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 public class Material {
 	// Following pattern matches all symbols between last occurence of . and / in a string (https://regex101.com/r/y093Mf/1)
 	static private final Pattern REPO_NAME_PATTERN = Pattern.compile("[^\\/.]+(?=\\.[^\\/.]*$)");
-	// Following pattern
+	// Following pattern matches all symbols between = and ]
 	static private final Pattern S3_NAME_PATTERN = Pattern.compile("\\=(.*?)]");
 	
     @SerializedName("id")

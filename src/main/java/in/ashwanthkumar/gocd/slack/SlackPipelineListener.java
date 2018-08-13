@@ -23,6 +23,7 @@ import static in.ashwanthkumar.utils.lang.StringUtils.startsWith;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Random;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 public class SlackPipelineListener extends PipelineListener {
@@ -34,7 +35,7 @@ public class SlackPipelineListener extends PipelineListener {
 	
 	private final List<String> passedList = Arrays.asList("Деплой отгремел.", "Деплой окончен. Всем спасибо.");
 	private final List<String> failedList = Arrays.asList("Деплой провален.", "Чуда не произошло.", "Всё пропало.");
-	private final List<String> buildingList = Arrays.asList("Деплой начался");
+	private final List<String> buildingList = Arrays.asList("Деплой начался.");
 	private final List<String> brokenList = Arrays.asList("Всё сломалось.");
 	private final List<String> fixedList = Arrays.asList("Отбой деплойной тревоги.");
 	private final List<String> cancelledList = Arrays.asList("Деплой отменён.");
@@ -104,40 +105,51 @@ public class SlackPipelineListener extends PipelineListener {
 			
 			buildAttachment.addField(new SlackAttachment.Field("Pipeline", details.name, true));
 			
-			buildAttachment.addField(new SlackAttachment.Field("Triggered by", stage.approvedBy, true));
+			// Reason for the first stage to trigger, not current
+			buildAttachment.addField(new SlackAttachment.Field("Triggered by", details.stages[0].approvedBy, true));
 			
-			if (rules.getDisplayConsoleLogLinks() && pipelineStatus != PipelineStatus.PASSED && pipelineStatus != PipelineStatus.BUILDING) {
+			// Do not display console log links for all statuses except failed ones
+			if (rules.getDisplayConsoleLogLinks() && pipelineStatus != PipelineStatus.PASSED && pipelineStatus != PipelineStatus.FIXED) {
 				consoleLogLinks = createConsoleLogLinks(rules.getGoServerHost(), details, stage, pipelineStatus);
-            }
-        } catch (GoNotificationMessage.BuildDetailsNotFoundException | IOException | URISyntaxException e) {
-            buildAttachment.text("Couldn't fetch build details.");
-            LOG.warn("Couldn't fetch build details", e);
-        }
+			}
+		} catch (GoNotificationMessage.BuildDetailsNotFoundException | IOException | URISyntaxException e) {
+			buildAttachment.text("Couldn't fetch build details.");
+			LOG.warn("Couldn't fetch build details", e);
+		}
 
         // Describe the root changes that made up this build.
-        if (rules.getDisplayMaterialChanges()) {
-            try {
-                List<MaterialRevision> changes = message.fetchChanges(rules);
+		if (rules.getDisplayMaterialChanges()) {
+			try {
+				List<MaterialRevision> changes = message.fetchChanges(rules);
 				for (MaterialRevision change : changes) {
+					// Get material name
+					String materialName = change.material.getName();
+					
+					// Do not show changes for ansible and angular-ndw 
+					// unless we find a way to show only whitelist changes
+					if ("angular-ndw".equals(materialName) || "ansible".equals(materialName)) {
+						continue;
+					}
+					
 					StringBuilder sb = new StringBuilder();
-                    
-                    for (Modification mod : change.modifications) {
+					
+					for (Modification mod : change.modifications) {
 						//LOG.info("Mod revision for material " + change.material + " is " + mod.revision);
 						//LOG.info("Material type is " + change.material.type);
 						//LOG.info("Material description " + change.material.description);
 						
-                        String url = change.modificationUrl(mod);
-                        if (url != null) {
+						String url = change.modificationUrl(mod);
+						if (url != null) {
 							// mod.revision for S3 bucket fetch-recovery-fw contains name of file, so we don't want to cut it
 							if (!"S3".equals(mod.userName)) {
 								sb.append("<").append(url).append("|").append(mod.revision.substring(0, 6)).append(">");
 							} else {
 								sb.append("<").append(url).append("|").append(mod.revision).append(">");
 							}
-                            sb.append(": ");
-                        } else if (mod.revision != null) {
-                            sb.append(mod.revision.substring(0, 6));
-                            sb.append(": ");
+							sb.append(": ");
+						} else if (mod.revision != null) {
+							sb.append(mod.revision.substring(0, 6));
+							sb.append(": ");
 						}
 						
 						String comment = null;
@@ -148,32 +160,30 @@ public class SlackPipelineListener extends PipelineListener {
 							JSONObject j = new JSONObject(mod.comment);
 							comment = j.getString("COMMENT");
 						}
-                        if (comment != null) {
-                            sb.append(comment);
-                        }
+						if (comment != null) {
+							sb.append(comment);
+						}
 						
-                        if (mod.userName != null && !"S3".equals(mod.userName)) {
-                            sb.append(" - ");
-                            sb.append(mod.userName);
-                        }
-                        sb.append("\n");
-                    }
-					
-					String materialName = change.material.getName();					
+						if (mod.userName != null && !"S3".equals(mod.userName)) {
+							sb.append(" - ");
+							sb.append(mod.userName);
+						}
+						sb.append("\n");
+					}
 					
 					String fieldName = "Changes for " + (materialName == null ? change.material.description : materialName);
 					buildAttachment.addField(new SlackAttachment.Field(fieldName, sb.toString(), false));
-                }
-            } catch (Exception e) {
-                buildAttachment.addField(new SlackAttachment.Field("Changes", "(Couldn't fetch changes; see server log.)", true));
-                LOG.warn("Couldn't fetch changes", e);
-            }
-        }
-
-        if (!consoleLogLinks.isEmpty()) {
-            String logLinks = Lists.mkString(consoleLogLinks, "", "", "\n");
-            buildAttachment.addField(new SlackAttachment.Field("Console Logs", logLinks, true));
-        }
+				}
+			} catch (IOException | URISyntaxException | JSONException e) {
+				buildAttachment.addField(new SlackAttachment.Field("Changes", "(Couldn't fetch changes; see server log.)", true));
+				LOG.warn("Couldn't fetch changes", e);
+			}
+		}
+		
+		if (!consoleLogLinks.isEmpty()) {
+			String logLinks = Lists.mkString(consoleLogLinks, "", "", "\n");
+			buildAttachment.addField(new SlackAttachment.Field("Console Logs", logLinks, true));
+		}
 
         LOG.info("Pushing " + title + " notification to Slack");
         return buildAttachment;
@@ -226,7 +236,7 @@ public class SlackPipelineListener extends PipelineListener {
 	}
 	
 	private void updateSlackChannel(String slackChannel) {
-		LOG.debug(String.format("Updating target slack channel to %s", slackChannel));
+		LOG.info(String.format("Updating target slack channel to %s", slackChannel));
         // by default post it to where ever the hook is configured to do so
         if (startsWith(slackChannel, "#")) {
             slack.sendToChannel(slackChannel.substring(1));
@@ -236,7 +246,7 @@ public class SlackPipelineListener extends PipelineListener {
     }
 
     private void updateWebhookUrl(String webbookUrl) {
-        LOG.debug(String.format("Updating target webhookUrl to %s", webbookUrl));
+        LOG.info(String.format("Updating target webhookUrl to %s", webbookUrl));
         // by default pick the global webhookUrl
         if (StringUtils.isNotEmpty(webbookUrl)) {
             slack.setWebhookUrl(webbookUrl);
