@@ -37,7 +37,7 @@ public class SlackPipelineListener extends PipelineListener {
 	private final List<String> failedList = Arrays.asList("Деплой провален.", "Чуда не произошло.", "Всё пропало.");
 	private final List<String> buildingList = Arrays.asList("Деплой начался.");
 	private final List<String> brokenList = Arrays.asList("Всё сломалось.");
-	private final List<String> fixedList = Arrays.asList("Отбой деплойной тревоги.");
+	private final List<String> fixedList = Arrays.asList("Предыдущий провал был случайностью.");
 	private final List<String> cancelledList = Arrays.asList("Деплой отменён.");
 	
     public SlackPipelineListener(Rules rules) {
