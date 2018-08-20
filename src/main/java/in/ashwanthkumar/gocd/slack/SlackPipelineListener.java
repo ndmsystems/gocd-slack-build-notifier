@@ -37,16 +37,15 @@ public class SlackPipelineListener extends PipelineListener {
 	private final List<String> failedList = Arrays.asList("Деплой провален.", "Чуда не произошло.", "Всё пропало.");
 	private final List<String> buildingList = Arrays.asList("Деплой начался.");
 	private final List<String> brokenList = Arrays.asList("Всё сломалось.");
-	private final List<String> fixedList = Arrays.asList("Предыдущий провал был случайностью.");
 	private final List<String> cancelledList = Arrays.asList("Деплой отменён.");
 	
     public SlackPipelineListener(Rules rules) {
         super(rules);
+		
         slack = new Slack(rules.getWebHookUrl(), rules.getProxy());
         updateSlackChannel(rules.getSlackChannel());
 
-        slack.displayName(rules.getSlackDisplayName())
-                .icon(rules.getSlackUserIcon());
+        slack.displayName(rules.getSlackDisplayName()).icon(rules.getSlackUserIcon());
     }
 
     @Override
@@ -220,12 +219,15 @@ public class SlackPipelineListener extends PipelineListener {
 		switch (pipelineStatus) {
 			case BROKEN:
 				return brokenList.get(new Random().nextInt(brokenList.size()));
-			case FIXED:
-				return fixedList.get(new Random().nextInt(fixedList.size()));
 			case BUILDING:
 				return buildingList.get(new Random().nextInt(buildingList.size()));
 			case FAILED:
 				return failedList.get(new Random().nextInt(failedList.size()));
+			case FIXED:
+				/*
+				* Deploy often canceled manually, preventing slack users from seeing failure notification.
+				* This makes fixedList phrase look weird, so we just stick to passedList for now.
+				*/
 			case PASSED:
 				return passedList.get(new Random().nextInt(passedList.size()));
 			case CANCELLED:
