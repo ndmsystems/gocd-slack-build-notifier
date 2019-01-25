@@ -144,8 +144,8 @@ public class GoNotificationPlugin extends AbstractNotificationPlugin implements 
         GoNotificationMessage message = parseNotificationMessage(goPluginApiRequest);
         int responseCode = SUCCESS_RESPONSE_CODE;
 
-        Map<String, Object> response = new HashMap<String, Object>();
-        List<String> messages = new ArrayList<String>();
+        Map<String, Object> response = new HashMap<>();
+        List<String> messages = new ArrayList<>();
         try {
             response.put("status", "success");
             LOGGER.info(message.fullyQualifiedJobName() + " has " + message.getStageState() + "/" + message.getStageResult());

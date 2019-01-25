@@ -207,18 +207,15 @@ public class GoNotificationMessage {
             pipeline.stage.result = "Broken";
     }
 
-    public Pipeline fetchDetails(Rules rules)
-        throws URISyntaxException, IOException, BuildDetailsNotFoundException
-    {
+    public Pipeline fetchDetails(Rules rules) throws URISyntaxException, IOException, BuildDetailsNotFoundException {
         return fetchDetailsForBuild(rules, Integer.parseInt(getPipelineCounter()));
     }
 
-    public List<MaterialRevision> fetchChanges(Rules rules)
-        throws URISyntaxException, IOException
-    {
+    public List<MaterialRevision> fetchChanges(Rules rules) throws IOException {
         Server server = serverFactory.getServer(rules);
-        Pipeline pipelineInstance =
-            server.getPipelineInstance(pipeline.name, Integer.parseInt(pipeline.counter));
+
+        Pipeline pipelineInstance = server.getPipelineInstance(pipeline.name, Integer.parseInt(pipeline.counter));
+        LOG.info("fetchChanges for " + pipeline.name + pipeline.counter);
         return pipelineInstance.rootChanges(server);
     }
 }

@@ -3,7 +3,6 @@ package in.ashwanthkumar.gocd.slack.jsonapi;
 import com.google.gson.annotations.SerializedName;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,15 +39,13 @@ public class Pipeline {
      * Collect all changed MaterialRevision objects, walking changed
      * "Pipeline" objects recursively instead of including them directly.
      */
-    public List<MaterialRevision> rootChanges(Server server)
-            throws MalformedURLException, IOException {
+    public List<MaterialRevision> rootChanges(Server server) throws IOException {
         List result = new ArrayList();
         addChangesRecursively(server, result);
         return result;
     }
 
-    void addChangesRecursively(Server server, List<MaterialRevision> outChanges)
-            throws MalformedURLException, IOException {
+    void addChangesRecursively(Server server, List<MaterialRevision> outChanges) throws IOException {
         for (MaterialRevision mr : buildCause.materialRevisions) {
             mr.addChangesRecursively(server, outChanges);
         }

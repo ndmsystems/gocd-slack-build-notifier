@@ -2,13 +2,12 @@ package in.ashwanthkumar.gocd.slack.jsonapi;
 
 import com.google.gson.annotations.SerializedName;
 import com.thoughtworks.go.plugin.api.logging.Logger;
+import org.json.JSONObject;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.json.JSONObject;
 
 public class MaterialRevision {
 	static private final Pattern PIPELINE_REVISION_PATTERN = Pattern.compile("^([^/]+)/(\\d+)/.*");
@@ -88,8 +87,7 @@ public class MaterialRevision {
      * Collect all changed MaterialRevision objects, walking changed
      * "Pipeline" objects recursively instead of including them directly.
      */
-    void addChangesRecursively(Server server, List<MaterialRevision> outChanges)
-            throws MalformedURLException, IOException {
+    void addChangesRecursively(Server server, List<MaterialRevision> outChanges) throws IOException {
         // Give up now if this material hasn't changed.
         if (!changed) {
             return;
@@ -106,15 +104,16 @@ public class MaterialRevision {
             // isPipeline is true, so we walk all of them just to be on the
             // safe side.
             for (Modification m : modifications) {
+            	LOG.info("modification " + m.revision + m.summarizeComment());
                 // Parse out the pipeline info.
                 Matcher matcher = PIPELINE_REVISION_PATTERN.matcher(m.revision);
+                LOG.info("modification revision " + m.revision);
                 if (matcher.matches()) {
                     String pipelineName = matcher.group(1);
                     int pipelineCounter = Integer.parseInt(matcher.group(2));
 
                     // Fetch the pipeline and walk it recursively.
-                    Pipeline pipeline =
-                            server.getPipelineInstance(pipelineName, pipelineCounter);
+                    Pipeline pipeline = server.getPipelineInstance(pipelineName, pipelineCounter);
                     pipeline.addChangesRecursively(server, outChanges);
                 } else {
                     LOG.error("Error matching pipeline revision: " + m.revision);
