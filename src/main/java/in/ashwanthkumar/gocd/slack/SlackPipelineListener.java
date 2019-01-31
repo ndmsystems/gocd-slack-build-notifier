@@ -118,7 +118,11 @@ public class SlackPipelineListener extends PipelineListener {
 				title = String.format(verbForTestbed(pipelineStatus));
 
 				buildAttachment.fallback(title).title(title);
-				buildAttachment.addField(new SlackAttachment.Field("", "Все занятые устройства нужно повторно аттачить к контейнерам.", false));
+
+				if (pipelineStatus == pipelineStatus.PASSED || pipelineStatus == pipelineStatus.FIXED) {
+					buildAttachment.footer("Все занятые устройства нужно повторно аттачить к контейнерам.");
+					buildAttachment.footerIcon("https://helpcenter.veeam.com/docs/vao/userguide/images/state_warning.png");
+				}
 			}
 
 			LOG.info("message: " + message);
