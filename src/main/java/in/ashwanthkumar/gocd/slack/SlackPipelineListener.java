@@ -23,25 +23,28 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
+import static in.ashwanthkumar.gocd.slack.ruleset.PipelineStatus.FIXED;
+import static in.ashwanthkumar.gocd.slack.ruleset.PipelineStatus.PASSED;
 import static in.ashwanthkumar.utils.lang.StringUtils.startsWith;
 
 public class SlackPipelineListener extends PipelineListener {
 	private final Logger LOG = Logger.getLoggerFor(SlackPipelineListener.class);
-	public static String lastCounter;
 	private final Slack slack;
 
-	private final static String TESTBED_PIPELINE = "deployTestbed";
+	private final static String TESTPIT_PIPELINE = "deployTestpit";
+	private final static String DEPLOY_PIPELINE = "deployLAN";
+
 	private final List<String> passedList = Arrays.asList("Деплой отгремел.", "Деплой окончен. Всем спасибо.");
 	private final List<String> failedList = Arrays.asList("Деплой провален.", "Чуда не произошло.", "Всё пропало.");
 	private final List<String> buildingList = Arrays.asList("Деплой начался.");
 	private final List<String> brokenList = Arrays.asList("Всё сломалось.");
 	private final List<String> cancelledList = Arrays.asList("Деплой отменён.");
 
-	private final List<String> passedTestbedList = Arrays.asList("Деплой тестбеда окончен.", "Деплой тестбеда прошёл.");
-	private final List<String> failedTestbedList = Arrays.asList("Деплой тестбеда провален.");
-	private final List<String> buildingTestbedList = Arrays.asList("Деплой тестбеда начался.");
-	private final List<String> brokenTestbedList = Arrays.asList("Деплой тестбеда сломался.");
-	private final List<String> cancelledTestbedList = Arrays.asList("Деплой тестбеда отменён.");
+	private final List<String> passedTestpitList = Arrays.asList("Деплой тестпита окончен.", "Деплой тестпита прошёл.");
+	private final List<String> failedTestpitList = Arrays.asList("Деплой тестпита провален.");
+	private final List<String> buildingTestpitList = Arrays.asList("Деплой тестпита начался.");
+	private final List<String> brokenTestpitList = Arrays.asList("Деплой тестпита сломался.");
+	private final List<String> cancelledTestpitList = Arrays.asList("Деплой тестпита отменён.");
 
 	public SlackPipelineListener(Rules rules) {
 		super(rules);
@@ -61,13 +64,9 @@ public class SlackPipelineListener extends PipelineListener {
 
 	@Override
 	public void onPassed(PipelineRule rule, GoNotificationMessage message) throws Exception {
-		// Save last pipeline counter in case of success
-		lastCounter = message.getPipelineCounter();
-		LOG.info("lastCounter " + lastCounter);
-
 		updateSlackChannel(rule.getChannel());
 		updateWebhookUrl(rule.getWebhookUrl());
-		slack.push(slackAttachment(rule, message, PipelineStatus.PASSED).color("good"));
+		slack.push(slackAttachment(rule, message, PASSED).color("good"));
 	}
 
 	@Override
@@ -86,13 +85,9 @@ public class SlackPipelineListener extends PipelineListener {
 
 	@Override
 	public void onFixed(PipelineRule rule, GoNotificationMessage message) throws Exception {
-		// Save last pipeline counter in case of success
-		lastCounter = message.getPipelineCounter();
-		LOG.info("lastCounter " + lastCounter);
-
 		updateSlackChannel(rule.getChannel());
 		updateWebhookUrl(rule.getWebhookUrl());
-		slack.push(slackAttachment(rule, message, PipelineStatus.FIXED).color("good"));
+		slack.push(slackAttachment(rule, message, FIXED).color("good"));
 	}
 
 	@Override
@@ -113,14 +108,18 @@ public class SlackPipelineListener extends PipelineListener {
 		try {
 			Pipeline details = message.fetchDetails(rules);
 
-			// Ugly way of adding custom lists with status for testbed
-			if (details.name.equals(TESTBED_PIPELINE)) {
-				title = String.format(verbForTestbed(pipelineStatus));
+			if (details.name.equals(TESTPIT_PIPELINE)) {
+				title = String.format(verbForTestpit(pipelineStatus));
 
 				buildAttachment.fallback(title).title(title);
 
-				if (pipelineStatus == pipelineStatus.PASSED || pipelineStatus == pipelineStatus.FIXED) {
+				if (pipelineStatus == PASSED || pipelineStatus == FIXED) {
 					buildAttachment.footer("Все занятые устройства нужно повторно аттачить к контейнерам.");
+					buildAttachment.footerIcon("https://helpcenter.veeam.com/docs/vao/userguide/images/state_warning.png");
+				}
+			} else if (details.name.equals(DEPLOY_PIPELINE)) {
+				if (pipelineStatus == PASSED || pipelineStatus == FIXED) {
+					buildAttachment.footer("Контейнеры будут недоступны для запуска тестов еще 45 минут.");
 					buildAttachment.footerIcon("https://helpcenter.veeam.com/docs/vao/userguide/images/state_warning.png");
 				}
 			}
@@ -134,7 +133,7 @@ public class SlackPipelineListener extends PipelineListener {
 			buildAttachment.addField(new SlackAttachment.Field("Triggered by", details.stages[0].approvedBy, true));
 
 			// Do not display console log links for all statuses except failed ones
-			if (rules.getDisplayConsoleLogLinks() && pipelineStatus != PipelineStatus.PASSED && pipelineStatus != PipelineStatus.FIXED) {
+			if (rules.getDisplayConsoleLogLinks() && pipelineStatus != PASSED && pipelineStatus != FIXED) {
 				consoleLogLinks = createConsoleLogLinks(rules.getGoServerHost(), details, stage, pipelineStatus);
 			}
 		} catch (GoNotificationMessage.BuildDetailsNotFoundException e) {
@@ -154,7 +153,10 @@ public class SlackPipelineListener extends PipelineListener {
 
 				// Do not show changes for ansible and angular-ndw
 				// unless we find a way to show only whitelist changes
-				if ("newndw".equals(materialName) || "ansible".equals(materialName)) {
+				if ("newndw".equals(materialName)
+						|| "ansible".equals(materialName)
+						|| "ndm".equals(materialName)
+						|| "libndm".equals(materialName)) {
 					continue;
 				}
 
@@ -265,14 +267,14 @@ public class SlackPipelineListener extends PipelineListener {
 		}
 	}
 
-	private String verbForTestbed(PipelineStatus pipelineStatus) {
+	private String verbForTestpit(PipelineStatus pipelineStatus) {
 		switch (pipelineStatus) {
 			case BROKEN:
-				return brokenTestbedList.get(new Random().nextInt(brokenTestbedList.size()));
+				return brokenTestpitList.get(new Random().nextInt(brokenTestpitList.size()));
 			case BUILDING:
-				return buildingTestbedList.get(new Random().nextInt(buildingTestbedList.size()));
+				return buildingTestpitList.get(new Random().nextInt(buildingTestpitList.size()));
 			case FAILED:
-				return failedTestbedList.get(new Random().nextInt(failedTestbedList.size()));
+				return failedTestpitList.get(new Random().nextInt(failedTestpitList.size()));
 			case FIXED:
 				/*
 				 * Deploy often canceled manually, preventing slack users from seeing failure notification.
@@ -280,9 +282,9 @@ public class SlackPipelineListener extends PipelineListener {
 				 */
 			case PASSED:
 				// Save last counter for all dependent pipelines here?
-				return passedTestbedList.get(new Random().nextInt(passedTestbedList.size()));
+				return passedTestpitList.get(new Random().nextInt(passedTestpitList.size()));
 			case CANCELLED:
-				return cancelledTestbedList.get(new Random().nextInt(cancelledTestbedList.size()));
+				return cancelledTestpitList.get(new Random().nextInt(cancelledTestpitList.size()));
 			default:
 				return "";
 		}
