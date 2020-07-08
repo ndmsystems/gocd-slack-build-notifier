@@ -64,11 +64,28 @@ public class ServerTest {
         verify(httpConnectionUtil).getConnection(
                 url.capture()
         );
-        assertThat(url.getValue().toString(), is("https://example.org/go/api/pipelines/pipeline-test/instance/42"));
+        assertThat(url.getValue().toString(), is("https://example.org/go/api/pipelines/pipeline-test/42"));
     }
 
     @Test
-    public void shouldConnectWithCredentials() throws IOException {
+    public void shouldConnectWithAPIToken() throws IOException {
+        HttpConnectionUtil httpConnectionUtil = mockConnection();
+        Rules rules = new Rules();
+        Server server = new Server(rules, httpConnectionUtil);
+        rules.setGoAPIToken("a-valid-token-from-gocd-server");
+
+        HttpURLConnection conn = mock(HttpURLConnection.class);
+        when(httpConnectionUtil.getConnection(any(URL.class))).thenReturn(conn);
+        when(conn.getContent()).thenReturn(new Object());
+
+        server.getUrl(new URL("http://exmaple.org/"));
+
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn).setRequestProperty("Authorization", "Bearer a-valid-token-from-gocd-server");
+    }
+
+    @Test
+    public void shouldConnectWithUserPassCredentials() throws IOException {
         HttpConnectionUtil httpConnectionUtil = mockConnection();
         Rules rules = new Rules();
         Server server = new Server(rules, httpConnectionUtil);
@@ -81,11 +98,31 @@ public class ServerTest {
 
         server.getUrl(new URL("http://exmaple.org/"));
 
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
         verify(conn).setRequestProperty("Authorization", "Basic bG9naW46cGFzcw==");
     }
 
     @Test
-    public void shouldNotConnectWithoutCredentials() throws IOException {
+    public void shouldConnectWithAPITokenFavoringOverUserPassCredential() throws IOException {
+        HttpConnectionUtil httpConnectionUtil = mockConnection();
+        Rules rules = new Rules();
+        Server server = new Server(rules, httpConnectionUtil);
+        rules.setGoAPIToken("a-valid-token-from-gocd-server");
+        rules.setGoLogin("login");
+        rules.setGoPassword("pass");
+
+        HttpURLConnection conn = mock(HttpURLConnection.class);
+        when(httpConnectionUtil.getConnection(any(URL.class))).thenReturn(conn);
+        when(conn.getContent()).thenReturn(new Object());
+
+        server.getUrl(new URL("http://exmaple.org/"));
+
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn).setRequestProperty("Authorization", "Bearer a-valid-token-from-gocd-server");
+    }
+
+    @Test
+    public void shouldNotSetAuthorizationHeaderWithoutCredentials() throws IOException {
         HttpConnectionUtil httpConnectionUtil = mockConnection();
         Rules rules = new Rules();
         Server server = new Server(rules, httpConnectionUtil);
@@ -96,11 +133,12 @@ public class ServerTest {
 
         server.getUrl(new URL("http://exmaple.org/"));
 
-        verify(conn, never()).setRequestProperty(anyString(), anyString());
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn, never()).setRequestProperty(eq("Authorization"), anyString());
     }
 
     @Test
-    public void shouldNotConnectWithEmptyPassword() throws IOException {
+    public void shouldNotSetAuthorizationHeaderWithEmptyPassword() throws IOException {
         HttpConnectionUtil httpConnectionUtil = mockConnection();
         Rules rules = new Rules();
         rules.setGoLogin("login");
@@ -113,11 +151,12 @@ public class ServerTest {
 
         server.getUrl(new URL("http://exmaple.org/"));
 
-        verify(conn, never()).setRequestProperty(anyString(), anyString());
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn, never()).setRequestProperty(eq("Authorization"), anyString());
     }
 
     @Test
-    public void shouldNotConnectWithEmptyLoginName() throws IOException {
+    public void shouldNotSetAuthorizationHeaderWithEmptyLoginName() throws IOException {
         HttpConnectionUtil httpConnectionUtil = mockConnection();
         Rules rules = new Rules();
         rules.setGoLogin(null);
@@ -130,11 +169,12 @@ public class ServerTest {
 
         server.getUrl(new URL("http://exmaple.org/"));
 
-        verify(conn, never()).setRequestProperty(anyString(), anyString());
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn, never()).setRequestProperty(eq("Authorization"), anyString());
     }
 
     @Test
-    public void shouldNotConnectWithEmptyPasswordCredentials() throws IOException {
+    public void shouldNotSetAuthorizationHeaderWithEmptyPasswordCredentials() throws IOException {
         HttpConnectionUtil httpConnectionUtil = mockConnection();
         Rules rules = new Rules();
         rules.setGoLogin("");
@@ -147,7 +187,8 @@ public class ServerTest {
 
         server.getUrl(new URL("http://exmaple.org/"));
 
-        verify(conn, never()).setRequestProperty(anyString(), anyString());
+        verify(conn).setRequestProperty(eq("User-Agent"), anyString());
+        verify(conn, never()).setRequestProperty(eq("Authorization"), anyString());
     }
 
     private HttpConnectionUtil mockConnection() throws IOException {

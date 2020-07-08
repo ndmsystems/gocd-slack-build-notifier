@@ -7,6 +7,7 @@ import in.ashwanthkumar.gocd.slack.ruleset.Rules;
 import javax.xml.bind.DatatypeConverter;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 
@@ -44,15 +45,23 @@ public class Server {
 		}
 		LOG.info("Fetching " + normalizedUrl.toString());
 
-		HttpURLConnection request = httpConnectionUtil.getConnection(normalizedUrl);
+        HttpURLConnection request = httpConnectionUtil.getConnection(normalizedUrl);
+        // @since 20.1.0
+        request.setRequestProperty("Accept", "application/vnd.go.cd.v1+json");
+        request.setRequestProperty("User-Agent", "plugin/slack.notifier");
 
-		// Add in our HTTP authorization credentials if we have them.
-		if (isNotEmpty(mRules.getGoLogin()) && isNotEmpty(mRules.getGoPassword())) {
-			String userpass = mRules.getGoLogin() + ":" + mRules.getGoPassword();
-			String basicAuth = "Basic "
-					+ DatatypeConverter.printBase64Binary(userpass.getBytes());
-			request.setRequestProperty("Authorization", basicAuth);
-		}
+        // Add in our HTTP authorization credentials if we have them.
+        // Favor the API Token over username/password
+        String authHeader = null;
+        if (isNotEmpty(mRules.getGoAPIToken())) {
+            authHeader = "Bearer " + mRules.getGoAPIToken();
+        } else if (isNotEmpty(mRules.getGoLogin()) && isNotEmpty(mRules.getGoPassword())) {
+            String userpass = mRules.getGoLogin() + ":" + mRules.getGoPassword();
+            authHeader = "Basic " + DatatypeConverter.printBase64Binary(userpass.getBytes());
+        }
+        if (authHeader != null) {
+            request.setRequestProperty("Authorization", authHeader);
+        }
 
 		request.connect();
 
@@ -68,12 +77,14 @@ public class Server {
 		return httpConnectionUtil.convertResponse(json, History.class);
 	}
 
-	/**
-	 * Get a specific instance of a pipeline.
-	 */
-	public Pipeline getPipelineInstance(String pipelineName, int pipelineCounter) throws IOException {
-		URL url = new URL(String.format("%s/go/api/pipelines/%s/instance/%d", mRules.getGoAPIServerHost(), pipelineName, pipelineCounter));
-		JsonElement json = getUrl(url);
-		return httpConnectionUtil.convertResponse(json, Pipeline.class);
-	}
+    /**
+     * Get a specific instance of a pipeline.
+     */
+    public Pipeline getPipelineInstance(String pipelineName, int pipelineCounter)
+            throws MalformedURLException, IOException {
+        URL url = new URL(String.format("%s/go/api/pipelines/%s/%d",
+                mRules.getGoAPIServerHost(), pipelineName, pipelineCounter));
+        JsonElement json = getUrl(url);
+        return httpConnectionUtil.convertResponse(json, Pipeline.class);
+    }
 }
