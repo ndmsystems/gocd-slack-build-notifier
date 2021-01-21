@@ -119,7 +119,7 @@ public class SlackPipelineListener extends PipelineListener {
 				}
 			} else if (details.name.equals(DEPLOY_PIPELINE)) {
 				if (pipelineStatus == PASSED || pipelineStatus == FIXED) {
-					buildAttachment.footer("Контейнеры будут недоступны для запуска тестов еще 45 минут.");
+					buildAttachment.footer("Контейнеры будут недоступны для запуска тестов еще минут 15.");
 					buildAttachment.footerIcon("https://helpcenter.veeam.com/docs/vao/userguide/images/state_warning.png");
 				}
 			}
