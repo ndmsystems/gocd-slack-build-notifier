@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 public class MaterialRevision {
 	static private final Pattern PIPELINE_REVISION_PATTERN = Pattern.compile("^([^/]+)/(\\d+)/.*");
-	static private final Pattern GITHUB_MATERIAL_PATTERN = Pattern.compile("^URL:.*github\\.com(.+)\\.git,.*");
+	static private final Pattern GITHUB_MATERIAL_PATTERN = Pattern.compile("^URL:.*github\\.com:(.+)\\.git,.*");
 	static private final Pattern KILNHG_MATERIAL_PATTERN = Pattern.compile("^URL:.*@ndm\\.kilnhg\\.com(.+)\\.git,.*");
 	static private final Pattern S3_MATERIAL_PATTERN = Pattern.compile("^Repository:.*s3_bucket=.*Package.*");
 
