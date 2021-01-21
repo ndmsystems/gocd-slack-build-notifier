@@ -61,7 +61,7 @@ public class MaterialRevision {
 			if (commit.length() > 6)
 				commit = commit.substring(0, 6);
 			
-			return "https://github.com" + org_and_repo + "/commit/" + commit;
+			return "https://github.com/" + org_and_repo + "/commit/" + commit;
 		} else if (matcher2.matches()) { //This is a kilnhg repo
 			// Shorten our commit ID.
 			String commit = modification.revision;
